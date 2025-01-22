@@ -3,86 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <title>Board-Based RPS (Replay, Exit, Bot)</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 20px;
-    }
-    #loginContainer, #lobbyContainer, #gameContainer {
-      border: 1px solid #ccc;
-      padding: 10px;
-      margin-bottom: 10px;
-    }
-    .hidden { display: none; }
-
-    /* The board is 6 rows x 7 columns */
-    #board {
-      display: grid;
-      grid-template-columns: repeat(7, 50px);
-      grid-template-rows: repeat(6, 50px);
-      gap: 2px;
-      margin-top: 10px;
-    }
-    .cell {
-      width: 50px;
-      height: 50px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid #999;
-      font-weight: bold;
-      color: #333;
-      cursor: pointer;
-    }
-    .cell:nth-child(even) { background-color: #eee; }
-    .cell:nth-child(odd)  { background-color: #fff; }
-
-    .owner0 { background-color: #dfd !important; }
-    .owner1 { background-color: #ddf !important; }
-
-    #tieBreakModal {
-      margin-top: 10px;
-      padding: 8px;
-      border: 1px solid #aaa;
-      background: #f2f2f2;
-    }
-  </style>
+  <!-- Link to your new CSS -->
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Board-Based RPS (Replay, Exit, Bot)</h1>
+  <header>
+    <h1>Board-Based RPS (Replay, Exit, Bot)</h1>
+  </header>
 
-  <div id="loginContainer">
-    <h3>Enter your username</h3>
-    <input type="text" id="usernameInput" placeholder="Username">
-    <button id="joinBtn">Join Lobby</button>
-  </div>
+  <div class="container">
+    <!-- Login Container -->
+    <div id="loginContainer">
+      <h3>Enter your username</h3>
+      <input type="text" id="usernameInput" placeholder="Username" />
+      <button class="btn" id="joinBtn">Join Lobby</button>
+    </div>
 
-  <div id="lobbyContainer" class="hidden">
-    <h3>Lobby</h3>
-    <ul id="usersList"></ul>
-    <button id="playBotBtn">Play with Bot</button>
-  </div>
+    <!-- Lobby Container -->
+    <div id="lobbyContainer" class="hidden">
+      <h3>Lobby</h3>
+      <ul id="usersList"></ul>
+      <button class="btn btn-accent" id="playBotBtn">Play with Bot</button>
+    </div>
 
-  <div id="gameContainer" class="hidden">
-    <h3>Game Status: <span id="gameStatus"></span></h3>
-    <button id="reshuffleBtn">Reshuffle (3 left)</button>
-    <button id="readyBtn">Ready</button>
-    <div id="turnInfo"></div>
+    <!-- Game Container -->
+    <div id="gameContainer" class="hidden">
+      <h3>Game Status: <span id="gameStatus"></span></h3>
+      <div class="controls">
+        <button class="btn" id="reshuffleBtn">Reshuffle (3 left)</button>
+        <button class="btn" id="readyBtn">Ready</button>
+      </div>
+      <div id="turnInfo" class="turn-info"></div>
 
-    <div id="board"></div>
+      <div id="board" class="board"></div>
 
-    <button id="replayBtn" class="hidden">Replay</button>
-    <button id="exitLobbyBtn" class="hidden">Exit to Lobby</button>
+      <div class="controls">
+        <button class="btn" id="replayBtn" class="hidden">Replay</button>
+        <button class="btn btn-danger" id="exitLobbyBtn" class="hidden">Exit to Lobby</button>
+      </div>
 
-    <div id="tieBreakModal" class="hidden">
-      <p>It's a tie! Choose a new item:</p>
-      <button data-item="rock" class="tie-btn">Rock</button>
-      <button data-item="paper" class="tie-btn">Paper</button>
-      <button data-item="scissors" class="tie-btn">Scissors</button>
-      <p id="tieMessage" style="color:red;"></p>
+      <div id="tieBreakModal" class="hidden tie-modal">
+        <p>It's a tie! Choose a new item:</p>
+        <div class="tie-btns">
+          <button data-item="rock" class="tie-btn">Rock</button>
+          <button data-item="paper" class="tie-btn">Paper</button>
+          <button data-item="scissors" class="tie-btn">Scissors</button>
+        </div>
+        <p id="tieMessage" class="tie-message"></p>
+      </div>
     </div>
   </div>
 
+  <!-- Socket.io and JS -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="boardrps.js"></script>
 </body>
