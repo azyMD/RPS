@@ -28,6 +28,16 @@
   let myPlayerIndex = null;  // 0 or 1
   let selectedCell = null;
 
+  // Map item => image file path
+  function getItemImageSrc(item) {
+    switch (item) {
+      case "rock":     return "images/rock.png";
+      case "paper":    return "images/paper.png";
+      case "scissors": return "images/scissors.png";
+      default:         return ""; // for "tie" or unknown
+    }
+  }
+
   // ---------------------------
   // 1) Lobby / Login
   // ---------------------------
@@ -86,8 +96,7 @@
   // ---------------------------
   socket.on("startGame", (gameState) => {
     currentGame = gameState;
-    // Find out if I'm player0 or player1
-    myPlayerIndex = currentGame.players.findIndex(p => p.socketId === socket.id);
+    myPlayerIndex = gameState.players.findIndex(p => p.socketId === socket.id);
 
     lobbyContainer.classList.add("hidden");
     gameContainer.classList.remove("hidden");
@@ -170,7 +179,8 @@
     // Render board
     boardElement.innerHTML = "";
 
-    // We'll not do the "flip" logic in this version, but you can re-implement if you want each user to see themselves at bottom:
+    // Same approach as your original code: row 0 is top, row 5 is bottom.
+    // If you want to flip perspective, you can invert the row iteration.
     for (let r = 0; r < 6; r++) {
       for (let c = 0; c < 7; c++) {
         const cellDiv = document.createElement("div");
@@ -182,14 +192,29 @@
         if (cellData) {
           // color by owner
           cellDiv.classList.add(`owner${cellData.owner}`);
-          // if it's revealed or belongs to me, show item
+
+          // if it's revealed or belongs to me, show the item
           if (cellData.owner === myPlayerIndex || cellData.revealed || cellData.item === "tie") {
             if (cellData.item === "tie") {
               cellDiv.textContent = "TIE";
             } else {
-              cellDiv.textContent = cellData.item[0].toUpperCase();
+              // Instead of text, we show an image
+              const imgSrc = getItemImageSrc(cellData.item);
+              if (imgSrc) {
+                // create an <img> and append
+                const img = document.createElement("img");
+                img.src = imgSrc;
+                img.alt = cellData.item;
+                img.style.width = "30px";
+                img.style.height = "auto";
+                cellDiv.appendChild(img);
+              } else {
+                // fallback if something goes wrong
+                cellDiv.textContent = cellData.item[0].toUpperCase();
+              }
             }
           } else {
+            // hidden
             cellDiv.textContent = "?";
           }
         }
@@ -243,7 +268,7 @@
       });
 
       selectedCell = null;
-      renderGame();
+      renderGame(); // re-render to remove outline
     }
   }
 
