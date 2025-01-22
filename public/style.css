@@ -1,0 +1,156 @@
+/* Basic reset / body styling */
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, sans-serif;
+  background: #f6f7fb;
+  color: #333;
+}
+
+/* Header */
+header {
+  background: #343a40;
+  color: #fff;
+  padding: 1rem;
+  text-align: center;
+}
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+/* Container wraps the main content */
+.container {
+  max-width: 800px;
+  margin: 1.5rem auto;
+  background: #fff;
+  padding: 1rem 1.5rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+/* Headings inside container */
+.container h3 {
+  margin-top: 0;
+}
+
+/* Buttons */
+.btn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  background: #6c757d;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-right: 0.5rem;
+}
+.btn:hover {
+  background: #5a6268;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-accent {
+  background: #28a745;
+}
+.btn-accent:hover {
+  background: #218838;
+}
+.btn-danger {
+  background: #dc3545;
+}
+.btn-danger:hover {
+  background: #c82333;
+}
+
+/* Lobby users list */
+#usersList {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+#usersList li {
+  margin: 0.3rem 0;
+}
+
+/* Board area */
+.board {
+  display: grid;
+  grid-template-columns: repeat(7, 50px);
+  grid-template-rows: repeat(6, 50px);
+  gap: 2px;
+  margin-top: 1rem;
+}
+.board .cell {
+  width: 50px;
+  height: 50px;
+  border: 1px solid #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #333;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.board .cell:hover {
+  background-color: #ffe;
+}
+.board .cell:nth-child(even) {
+  background-color: #eee;
+}
+.board .cell:nth-child(odd) {
+  background-color: #fff;
+}
+.board .owner0 {
+  background-color: #dafdcf !important; /* Slightly different green */
+}
+.board .owner1 {
+  background-color: #d4e7fd !important; /* Slightly different blue */
+}
+
+/* Turn info styling */
+.turn-info {
+  font-size: 1rem;
+  margin: 0.5rem 0 1rem;
+  font-weight: 600;
+  color: #444;
+}
+
+/* Controls grouping */
+.controls {
+  margin: 0.5rem 0;
+}
+
+/* Tie break modal */
+.tie-modal {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #aaa;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+.tie-btns {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.tie-btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+}
+.tie-btn:hover {
+  background: #ddd;
+}
+.tie-message {
+  color: red;
+  margin: 0.5rem 0 0;
+}
