@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Board-Based RPS (Replay, Exit, Bot)</title>
+  <title>Board RPS - Animated Soldiers</title>
   <style>
     body {
       font-family: sans-serif;
@@ -15,41 +15,61 @@
     }
     .hidden { display: none; }
 
-    /* The board is 6 rows x 7 columns */
-    #board {
-      display: grid;
-      grid-template-columns: repeat(7, 50px);
-      grid-template-rows: repeat(6, 50px);
-      gap: 2px;
+    /* We'll have a container for the 7x6 board, 350x300 (7*50 wide, 6*50 tall) */
+    #boardContainer {
+      position: relative;
+      width: 350px; /* 7 columns * 50px each */
+      height: 300px; /* 6 rows * 50px each */
+      border: 2px solid #333;
+      background: #eee; /* or a checkered pattern if you want */
       margin-top: 10px;
     }
-    .cell {
-      width: 50px;
-      height: 50px;
+
+    /* We'll place a base grid overlay just to see cells if we want. 
+       Or we can keep it simple. */
+    .grid-cell {
+      position: absolute;
+      width: 50px; height: 50px;
+      border: 1px dashed #ccc;
+      box-sizing: border-box;
+    }
+
+    /* Each soldier is an absolutely positioned .soldier div with transitions */
+    .soldier {
+      position: absolute;
+      width: 48px; /* slightly smaller than cell, so we see borders */
+      height: 48px;
+      margin: 1px;
+      border-radius: 4px;
+      color: #000;
+      font-weight: bold;
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid #999;
-      font-weight: bold;
-      color: #333;
+      transition: top 0.4s ease, left 0.4s ease, opacity 0.4s ease;
       cursor: pointer;
+      user-select: none;
     }
-    .cell:nth-child(even) { background-color: #eee; }
-    .cell:nth-child(odd) { background-color: #fff; }
+    .soldier.owner0 { background-color: #dfd; }
+    .soldier.owner1 { background-color: #ddf; }
 
-    .owner0 { background-color: #dfd !important; }
-    .owner1 { background-color: #ddf !important; }
+    /* Tie occupant or unknown occupant can have different styling, if needed. */
 
-    #tieBreakModal {
-      margin-top: 10px;
-      padding: 8px;
-      border: 1px solid #aaa;
-      background: #f2f2f2;
+    /* For "removed" soldiers, we might fade them out with an .dying class */
+    .dying { opacity: 0; }
+
+    /* For "new" soldiers, we might animate from 0 opacity to 1 */
+    .new-soldier {
+      opacity: 0;
+      animation: fadeIn 0.4s forwards;
+    }
+    @keyframes fadeIn {
+      to { opacity: 1; }
     }
   </style>
 </head>
 <body>
-  <h1>Board-Based RPS (Replay, Exit, Bot)</h1>
+  <h1>Board RPS - Animated Soldiers</h1>
 
   <div id="loginContainer">
     <h3>Enter your username</h3>
@@ -68,11 +88,14 @@
     <button id="reshuffleBtn">Reshuffle (3 left)</button>
     <button id="readyBtn">Ready</button>
     <div id="turnInfo"></div>
-    <div id="board"></div>
+
+    <div id="boardContainer"></div>
+
     <button id="replayBtn" class="hidden">Replay</button>
     <button id="exitLobbyBtn" class="hidden">Exit to Lobby</button>
 
-    <div id="tieBreakModal" class="hidden">
+    <!-- Tie break modal -->
+    <div id="tieBreakModal" class="hidden" style="margin-top:10px; border:1px solid #aaa; padding:8px; background:#f4f4f4;">
       <p>It's a tie! Choose a new item:</p>
       <button data-item="rock" class="tie-btn">Rock</button>
       <button data-item="paper" class="tie-btn">Paper</button>
