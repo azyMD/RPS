@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Board RPS (Chess Coloring + Flip + Animations)</title>
+  <title>Board-Based RPS (Replay, Exit, Bot)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -15,13 +15,11 @@
     }
     .hidden { display: none; }
 
-    /* We'll make a 6x7 "board" with .cell divs. Each row is a container. */
+    /* The board is 6 rows x 7 columns */
     #board {
       display: grid;
-      /* We won't define explicit columns/rows here; we'll generate them in JS. 
-         Or we do: grid-template-columns: repeat(7, 50px); 
-                  grid-template-rows: repeat(6, 50px); 
-         But we want to flip row order for player0, so let's build row-by-row in JS. */
+      grid-template-columns: repeat(7, 50px);
+      grid-template-rows: repeat(6, 50px);
       gap: 2px;
       margin-top: 10px;
     }
@@ -31,34 +29,27 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: bold;
       border: 1px solid #999;
+      font-weight: bold;
+      color: #333;
       cursor: pointer;
-      transition: background-color 0.4s, color 0.4s;
     }
-    /* Chess coloring: we can do nth-child or use row/col logic. We'll do JS for color. */
-    .cell.chessLight { background-color: #fff; }
-    .cell.chessDark { background-color: #ddd; }
+    .cell:nth-child(even) { background-color: #eee; }
+    .cell:nth-child(odd) { background-color: #fff; }
 
-    /* If occupant is p0 or p1: highlight color */
-    .owner0 { background-color: #cfc !important; }
-    .owner1 { background-color: #ccf !important; }
+    .owner0 { background-color: #dfd !important; }
+    .owner1 { background-color: #ddf !important; }
 
-    /* small highlight for changed occupant */
-    .changed {
-      animation: changedCell 0.4s;
+    #tieBreakModal {
+      margin-top: 10px;
+      padding: 8px;
+      border: 1px solid #aaa;
+      background: #f2f2f2;
     }
-    @keyframes changedCell {
-      from { box-shadow: 0 0 10px #ffa; }
-      to   { box-shadow: none; }
-    }
-
-    /* tie occupant or hidden occupant is handled in text. */
-
   </style>
 </head>
 <body>
-  <h1>Board-Based RPS with Perspective Flip & Minimal Animation</h1>
+  <h1>Board-Based RPS (Replay, Exit, Bot)</h1>
 
   <div id="loginContainer">
     <h3>Enter your username</h3>
@@ -77,13 +68,11 @@
     <button id="reshuffleBtn">Reshuffle (3 left)</button>
     <button id="readyBtn">Ready</button>
     <div id="turnInfo"></div>
-
     <div id="board"></div>
-
     <button id="replayBtn" class="hidden">Replay</button>
     <button id="exitLobbyBtn" class="hidden">Exit to Lobby</button>
 
-    <div id="tieBreakModal" class="hidden" style="margin-top:10px; border:1px solid #aaa; padding:8px; background:#f4f4f4;">
+    <div id="tieBreakModal" class="hidden">
       <p>It's a tie! Choose a new item:</p>
       <button data-item="rock" class="tie-btn">Rock</button>
       <button data-item="paper" class="tie-btn">Paper</button>
