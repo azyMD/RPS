@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ICQ-Style Board RPS</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    #loginContainer, #lobbyContainer, #gameContainer {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .hidden { display: none; }
+
+    /* The board is 6 rows x 7 columns */
+    #board {
+      display: grid;
+      grid-template-columns: repeat(7, 50px);
+      grid-template-rows: repeat(6, 50px);
+      gap: 2px;
+      margin-top: 10px;
+    }
+    .cell {
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-weight: bold;
+      color: #333;
+      border: 1px solid #999;
+    }
+    /* Chess-like coloring */
+    .cell:nth-child(even) {
+      background-color: #eee;
+    }
+    .cell:nth-child(odd) {
+      background-color: #fff;
+    }
+
+    .owner0 { background-color: #cfc !important; }
+    .owner1 { background-color: #ccf !important; }
+  </style>
+</head>
+<body>
+  <h1>ICQ-Style Board RPS</h1>
+
+  <div id="loginContainer">
+    <h3>Enter your username</h3>
+    <input type="text" id="usernameInput" placeholder="Username">
+    <button id="joinBtn">Join Lobby</button>
+  </div>
+
+  <div id="lobbyContainer" class="hidden">
+    <h3>Lobby</h3>
+    <ul id="usersList"></ul>
+  </div>
+
+  <div id="gameContainer" class="hidden">
+    <h3>Game: <span id="gameStatus"></span></h3>
+
+    <div>
+      <button id="reshuffleBtn">Reshuffle (3 left)</button>
+      <button id="readyBtn">Ready</button>
+    </div>
+
+    <div id="turnInfo"></div>
+    <div id="board"></div>
+
+    <div id="tieBreakModal" class="hidden">
+      <p>There was a tie!</p>
+      <p>Choose a new item for your soldier:</p>
+      <button data-item="rock" class="tie-btn">Rock</button>
+      <button data-item="paper" class="tie-btn">Paper</button>
+      <button data-item="scissors" class="tie-btn">Scissors</button>
+      <p><em>Wait for the opponent to pick as well.</em></p>
+      <p id="tieMessage"></p>
+    </div>
+  </div>
+
+  <!-- Socket.io -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Client logic -->
+  <script src="boardRPS.js"></script>
+</body>
+</html>
