@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>ICQ-Style Board RPS (Enhanced)</title>
+  <title>Board-Based RPS (Replay, Exit, Bot)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -21,7 +21,7 @@
       grid-template-columns: repeat(7, 50px);
       grid-template-rows: repeat(6, 50px);
       gap: 2px;
-      margin: 10px 0;
+      margin-top: 10px;
     }
     .cell {
       width: 50px;
@@ -29,27 +29,16 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
       border: 1px solid #999;
       font-weight: bold;
       color: #333;
+      cursor: pointer;
     }
-    /* Chess-like coloring */
-    .cell:nth-child(even) {
-      background-color: #eee;
-    }
-    .cell:nth-child(odd) {
-      background-color: #fff;
-    }
+    .cell:nth-child(even) { background-color: #eee; }
+    .cell:nth-child(odd) { background-color: #fff; }
 
     .owner0 { background-color: #dfd !important; }
     .owner1 { background-color: #ddf !important; }
-
-    /* Simple layout for player labels */
-    #topPlayerName, #bottomPlayerName {
-      text-align: center;
-      font-weight: bold;
-    }
 
     #tieBreakModal {
       margin-top: 10px;
@@ -60,7 +49,7 @@
   </style>
 </head>
 <body>
-  <h1>ICQ-Style Board RPS (Enhanced)</h1>
+  <h1>Board-Based RPS (Replay, Exit, Bot)</h1>
 
   <div id="loginContainer">
     <h3>Enter your username</h3>
@@ -71,34 +60,28 @@
   <div id="lobbyContainer" class="hidden">
     <h3>Lobby</h3>
     <ul id="usersList"></ul>
+    <button id="playBotBtn">Play with Bot</button>
   </div>
 
   <div id="gameContainer" class="hidden">
-    <h3>Game: <span id="gameStatus"></span></h3>
-
+    <h3>Game Status: <span id="gameStatus"></span></h3>
     <button id="reshuffleBtn">Reshuffle (3 left)</button>
     <button id="readyBtn">Ready</button>
-
     <div id="turnInfo"></div>
-
-    <!-- Player names around the board -->
-    <div id="topPlayerName"></div>
     <div id="board"></div>
-    <div id="bottomPlayerName"></div>
+    <button id="replayBtn" class="hidden">Replay</button>
+    <button id="exitLobbyBtn" class="hidden">Exit to Lobby</button>
 
-    <!-- Tie break modal -->
     <div id="tieBreakModal" class="hidden">
       <p>It's a tie! Choose a new item:</p>
       <button data-item="rock" class="tie-btn">Rock</button>
       <button data-item="paper" class="tie-btn">Paper</button>
       <button data-item="scissors" class="tie-btn">Scissors</button>
-      <p id="tieMessage" style="color: red;"></p>
+      <p id="tieMessage" style="color:red;"></p>
     </div>
   </div>
 
-  <!-- Socket.io -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Client logic -->
-  <script src="boardrps.js"></script>
+  <script src="boardRPS.js"></script>
 </body>
 </html>
