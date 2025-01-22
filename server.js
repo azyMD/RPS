@@ -3,33 +3,27 @@ const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
 
-// Create Express + Socket.IO server
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Serve static files from "public"
+// Serve the "public" folder
 app.use(express.static(path.join(__dirname, "public")));
 
-// Lobby data: Map<socketId, { username, inGame }>
+// Store lobby users: { socketId => { username, inGame } }
 const lobbyUsers = new Map();
 
-// Ongoing games: Map<gameId, gameState>
+// Ongoing games: { gameId => gameState }
 const ongoingGames = new Map();
 
-// ---------------------------------------
-// Utility Functions
-// ---------------------------------------
-
-// Generate a random game ID (like "game_abc123")
+// Generate random ID for new games
 function generateGameId() {
   return "game_" + Math.random().toString(36).substr(2, 8);
 }
 
-// Create an empty 6x7 board (rows=6, cols=7)
+// Create 6x7 board
 function createEmptyBoard() {
-  const rows = 6;
-  const cols = 7;
+  const rows = 6, cols = 7;
   const board = [];
   for (let r = 0; r < rows; r++) {
     board[r] = [];
@@ -40,13 +34,13 @@ function createEmptyBoard() {
   return board;
 }
 
-// Return a random "rock"/"paper"/"scissors"
+// Random R/P/S
 function randomItem() {
   const items = ["rock", "paper", "scissors"];
   return items[Math.floor(Math.random() * items.length)];
 }
 
-// Compare two RPS items. Return: 0 => tie, 1 => item1 wins, 2 => item2 wins
+// Compare RPS: 0= tie, 1= item1 wins, 2= item2 wins
 function compareItems(i1, i2) {
   if (i1 === i2) return 0;
   if (
@@ -59,56 +53,54 @@ function compareItems(i1, i2) {
   return 2;
 }
 
-// Place two human players' soldiers: 
-// Player 0 in rows 0..1, Player 1 in rows 4..5
+// Initialize board for a 2‐player match
+// Player0 => rows 0..1, Player1 => rows 4..5
 function initializeBoardForPlayers(board) {
-  // Player 0 => top
   for (let r = 0; r < 2; r++) {
     for (let c = 0; c < 7; c++) {
       board[r][c] = {
         owner: 0,
         item: randomItem(),
-        revealed: false,
+        revealed: false
       };
     }
   }
-  // Player 1 => bottom
   for (let r = 4; r < 6; r++) {
     for (let c = 0; c < 7; c++) {
       board[r][c] = {
         owner: 1,
         item: randomItem(),
-        revealed: false,
+        revealed: false
       };
     }
   }
 }
 
-// Place human (0) in rows 0..1, Bot (1) in rows 4..5
+// For a bot game, same concept except the second player is the bot
 function initializeBoardWithBot(board) {
-  // Player 0 => rows 0..1
+  // Rows 0..1 => player 0 (human)
   for (let r = 0; r < 2; r++) {
     for (let c = 0; c < 7; c++) {
       board[r][c] = {
         owner: 0,
         item: randomItem(),
-        revealed: false,
+        revealed: false
       };
     }
   }
-  // Bot => rows 4..5
+  // Rows 4..5 => player 1 (bot)
   for (let r = 4; r < 6; r++) {
     for (let c = 0; c < 7; c++) {
       board[r][c] = {
         owner: 1,
         item: randomItem(),
-        revealed: false,
+        revealed: false
       };
     }
   }
 }
 
-// Check if either player has 0 soldiers left => game over
+// Check if a player lost all soldiers => game end
 function checkForWinner(game) {
   const board = game.board;
   let p0Count = 0, p1Count = 0;
@@ -132,7 +124,7 @@ function checkForWinner(game) {
   return false;
 }
 
-// End a turn => check winner or switch current player
+// End the turn => check winner or switch
 function endTurn(game) {
   if (checkForWinner(game)) {
     game.state = "finished";
@@ -141,20 +133,19 @@ function endTurn(game) {
   }
 }
 
-// Return all possible moves for 'playerIndex'
-function getAllPossibleMoves(game, playerIndex) {
+// For the bot: gather all valid moves
+function getAllMoves(game, playerIndex) {
   const board = game.board;
   const moves = [];
   for (let r = 0; r < 6; r++) {
     for (let c = 0; c < 7; c++) {
       const cell = board[r][c];
       if (cell && cell.owner === playerIndex) {
-        // can move 1 cell in any direction
+        // can move up to 1 cell in all directions
         for (let dr = -1; dr <= 1; dr++) {
           for (let dc = -1; dc <= 1; dc++) {
             if (dr === 0 && dc === 0) continue;
-            const nr = r + dr;
-            const nc = c + dc;
+            const nr = r + dr, nc = c + dc;
             if (nr >= 0 && nr < 6 && nc >= 0 && nc < 7) {
               const target = board[nr][nc];
               if (!target || target.owner !== playerIndex) {
@@ -169,57 +160,54 @@ function getAllPossibleMoves(game, playerIndex) {
   return moves;
 }
 
-// Let the bot pick a random valid move
+// Pick random move for the bot
 function botMakeMove(game) {
-  const moves = getAllPossibleMoves(game, 1);
-  if (moves.length === 0) return; // no moves => stuck
+  const moves = getAllMoves(game, 1);
+  if (moves.length === 0) return;
   const choice = moves[Math.floor(Math.random() * moves.length)];
 
-  const { fromRow, fromCol, toRow, toCol } = choice;
   const board = game.board;
-  const soldierCell = board[fromRow][fromCol];
-  board[fromRow][fromCol] = null;
+  const fromCell = board[choice.fromRow][choice.fromCol];
+  board[choice.fromRow][choice.fromCol] = null;
 
-  const target = board[toRow][toCol];
-  if (!target) {
+  const targetCell = board[choice.toRow][choice.toCol];
+  if (!targetCell) {
     // empty
-    board[toRow][toCol] = {
+    board[choice.toRow][choice.toCol] = {
       owner: 1,
-      item: soldierCell.item,
-      revealed: soldierCell.revealed
+      item: fromCell.item,
+      revealed: fromCell.revealed
     };
     endTurn(game);
   } else {
     // combat
-    const result = compareItems(soldierCell.item, target.item);
+    const result = compareItems(fromCell.item, targetCell.item);
     if (result === 0) {
       // tie
       game.waitingForTieBreak = true;
-      // attacker is p1
       game.tieSoldierP1 = {
-        row: toRow,
-        col: toCol,
-        item: soldierCell.item,
+        row: choice.toRow,
+        col: choice.toCol,
+        item: fromCell.item,
         revealed: true
       };
       game.tieSoldierP0 = {
-        row: toRow,
-        col: toCol,
-        item: target.item,
+        row: choice.toRow,
+        col: choice.toCol,
+        item: targetCell.item,
         revealed: true
       };
-      board[toRow][toCol] = { owner: null, item: "tie", revealed: true };
+      board[choice.toRow][choice.toCol] = { owner: null, item: "tie", revealed: true };
     } else {
-      let winnerIndex;
-      let winnerItem;
+      let winnerIndex, winnerItem;
       if (result === 1) {
         winnerIndex = 1;
-        winnerItem = soldierCell.item;
+        winnerItem = fromCell.item;
       } else {
-        winnerIndex = target.owner;
-        winnerItem = target.item;
+        winnerIndex = targetCell.owner;
+        winnerItem = targetCell.item;
       }
-      board[toRow][toCol] = {
+      board[choice.toRow][choice.toCol] = {
         owner: winnerIndex,
         item: winnerItem,
         revealed: true
@@ -229,39 +217,37 @@ function botMakeMove(game) {
   }
 }
 
-// ---------------------------------------
-// Socket.IO logic
-// ---------------------------------------
+// -----------------------------------
+// Socket.IO
+// -----------------------------------
+const updateLobby = () => {
+  const data = Array.from(lobbyUsers.entries()).map(([sid, val]) => ({
+    socketId: sid,
+    username: val.username,
+    inGame: val.inGame
+  }));
+  io.emit("lobbyData", data);
+};
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // 1) Lobby join
   socket.on("joinLobby", (username) => {
     lobbyUsers.set(socket.id, { username, inGame: false });
     updateLobby();
   });
 
-  function updateLobby() {
-    const data = Array.from(lobbyUsers.entries()).map(([sid, info]) => ({
-      socketId: sid,
-      username: info.username,
-      inGame: info.inGame
-    }));
-    io.emit("lobbyData", data);
-  }
-
-  // 2) Challenge flow
-  socket.on("challengeUser", (opponentId) => {
-    const challenger = lobbyUsers.get(socket.id);
-    const opponent = lobbyUsers.get(opponentId);
-    if (!challenger || !opponent) return;
-    if (challenger.inGame || opponent.inGame) return;
-    io.to(opponentId).emit("challengeRequest", {
+  // Challenge
+  socket.on("challengeUser", (oppId) => {
+    const user = lobbyUsers.get(socket.id);
+    const opp = lobbyUsers.get(oppId);
+    if (!user || !opp) return;
+    if (user.inGame || opp.inGame) return;
+    io.to(oppId).emit("challengeRequest", {
       from: socket.id,
-      fromUsername: challenger.username
+      fromUsername: user.username
     });
   });
-
   socket.on("challengeResponse", ({ from, accepted }) => {
     const challenger = lobbyUsers.get(from);
     const responder = lobbyUsers.get(socket.id);
@@ -292,7 +278,6 @@ io.on("connection", (socket) => {
       challenger.inGame = true;
       responder.inGame = true;
 
-      // join room
       io.sockets.sockets.get(from)?.join(gameId);
       io.sockets.sockets.get(socket.id)?.join(gameId);
 
@@ -305,7 +290,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 3) Play with Bot
+  // Play with Bot
   socket.on("playWithBot", () => {
     const user = lobbyUsers.get(socket.id);
     if (!user || user.inGame) return;
@@ -339,133 +324,104 @@ io.on("connection", (socket) => {
     updateLobby();
   });
 
-  // 4) Reshuffle
+  // Reshuffle
   socket.on("requestReshuffle", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
     if (game.state !== "setup") return;
 
-    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
-    if (playerIndex < 0) return;
-    const player = game.players[playerIndex];
+    const idx = game.players.findIndex(p => p.socketId === socket.id);
+    if (idx < 0) return;
+    const player = game.players[idx];
     if (player.reshuffles <= 0) return;
 
     player.reshuffles--;
 
-    // re-randomize that player's 2 rows
-    const rowsToShuffle = (playerIndex === 0) ? [0,1] : [4,5];
-    rowsToShuffle.forEach(r => {
+    const rowsToShuffle = (idx === 0) ? [0,1] : [4,5];
+    for (let r of rowsToShuffle) {
       for (let c = 0; c < 7; c++) {
         const cell = game.board[r][c];
-        if (cell && cell.owner === playerIndex) {
+        if (cell && cell.owner === idx) {
           cell.item = randomItem();
           cell.revealed = false;
         }
       }
-    });
+    }
 
     io.to(gameId).emit("updateGame", game);
   });
 
-  // 5) Player Ready
+  // Player Ready
   socket.on("playerReady", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
     if (game.state !== "setup") return;
 
-    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
-    if (playerIndex < 0) return;
-    game.players[playerIndex].ready = true;
+    const idx = game.players.findIndex(p => p.socketId === socket.id);
+    if (idx < 0) return;
+    game.players[idx].ready = true;
 
-    // If both (or if it's a bot game, the bot is always ready) => start
+    // If both ready or if it's a bot game => start
     if (game.players.every(p => p.ready)) {
       game.state = "playing";
     }
     io.to(gameId).emit("updateGame", game);
   });
 
-  // 6) Player Move
+  // Player Move
   socket.on("playerMove", ({ gameId, fromRow, fromCol, toRow, toCol }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
     if (game.state !== "playing") return;
     if (game.waitingForTieBreak) return;
 
-    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
-    if (playerIndex < 0) return;
-    if (playerIndex !== game.currentPlayerIndex) return;
+    const idx = game.players.findIndex(p => p.socketId === socket.id);
+    if (idx < 0) return;
+    if (idx !== game.currentPlayerIndex) return;
 
     const board = game.board;
-    const soldierCell = board[fromRow][fromCol];
-    if (!soldierCell || soldierCell.owner !== playerIndex) return;
+    const soldier = board[fromRow][fromCol];
+    if (!soldier || soldier.owner !== idx) return;
 
-    // Validate move range
-    if (Math.abs(toRow - fromRow) > 1 || Math.abs(toCol - fromCol) > 1) {
-      return;
-    }
-    if (toRow < 0 || toRow > 5 || toCol < 0 || toCol > 6) {
-      return;
-    }
-    // Check occupant
-    const targetCell = board[toRow][toCol];
-    if (targetCell && targetCell.owner === playerIndex) {
-      return; // can't move onto friendly soldier
-    }
+    // Check 1 cell range
+    if (Math.abs(toRow - fromRow) > 1 || Math.abs(toCol - fromCol) > 1) return;
+    if (toRow < 0 || toRow > 5 || toCol < 0 || toCol > 6) return;
 
-    // Move soldier
+    const target = board[toRow][toCol];
+    if (target && target.owner === idx) return; // can't land on ally
+
+    // Move
     board[fromRow][fromCol] = null;
-    if (!targetCell) {
-      // empty cell
+    if (!target) {
+      // empty
       board[toRow][toCol] = {
-        owner: playerIndex,
-        item: soldierCell.item,
-        revealed: soldierCell.revealed
+        owner: idx,
+        item: soldier.item,
+        revealed: soldier.revealed
       };
       endTurn(game);
     } else {
-      // combat
-      const result = compareItems(soldierCell.item, targetCell.item);
-      if (result === 0) {
+      // fight
+      const res = compareItems(soldier.item, target.item);
+      if (res === 0) {
         // tie => tie break
         game.waitingForTieBreak = true;
-        if (playerIndex === 0) {
-          game.tieSoldierP0 = {
-            row: toRow,
-            col: toCol,
-            item: soldierCell.item,
-            revealed: true
-          };
-          game.tieSoldierP1 = {
-            row: toRow,
-            col: toCol,
-            item: targetCell.item,
-            revealed: true
-          };
+        if (idx === 0) {
+          game.tieSoldierP0 = { row: toRow, col: toCol, item: soldier.item, revealed: true };
+          game.tieSoldierP1 = { row: toRow, col: toCol, item: target.item, revealed: true };
         } else {
-          game.tieSoldierP1 = {
-            row: toRow,
-            col: toCol,
-            item: soldierCell.item,
-            revealed: true
-          };
-          game.tieSoldierP0 = {
-            row: toRow,
-            col: toCol,
-            item: targetCell.item,
-            revealed: true
-          };
+          game.tieSoldierP1 = { row: toRow, col: toCol, item: soldier.item, revealed: true };
+          game.tieSoldierP0 = { row: toRow, col: toCol, item: target.item, revealed: true };
         }
         board[toRow][toCol] = { owner: null, item: "tie", revealed: true };
       } else {
-        // a winner
-        let winnerIndex;
-        let winnerItem;
-        if (result === 1) {
-          winnerIndex = playerIndex;
-          winnerItem = soldierCell.item;
+        let winnerIndex, winnerItem;
+        if (res === 1) {
+          winnerIndex = idx;
+          winnerItem = soldier.item;
         } else {
-          winnerIndex = targetCell.owner;
-          winnerItem = targetCell.item;
+          winnerIndex = target.owner;
+          winnerItem = target.item;
         }
         board[toRow][toCol] = {
           owner: winnerIndex,
@@ -477,7 +433,7 @@ io.on("connection", (socket) => {
     }
     io.to(gameId).emit("updateGame", game);
 
-    // If bot game & still playing => let bot move
+    // If bot game => let bot move if still playing
     if (game.isBotGame && !game.waitingForTieBreak && game.state === "playing") {
       if (game.currentPlayerIndex === 1 && !game.winner) {
         botMakeMove(game);
@@ -486,30 +442,29 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 7) Tie break choice
+  // Tie break
   socket.on("tieBreakChoice", ({ gameId, newItem }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
     if (!game.waitingForTieBreak) return;
 
-    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
-    if (playerIndex < 0) return;
+    const idx = game.players.findIndex(p => p.socketId === socket.id);
+    if (idx < 0) return;
 
-    if (playerIndex === 0) {
+    if (idx === 0) {
       game.tieSoldierP0.item = newItem;
     } else {
       game.tieSoldierP1.item = newItem;
     }
 
     if (game.tieSoldierP0.item && game.tieSoldierP1.item) {
-      // compare again
       const result = compareItems(game.tieSoldierP0.item, game.tieSoldierP1.item);
       if (result === 0) {
+        // tie again
         io.to(gameId).emit("tieAgain", game);
         game.tieSoldierP0.item = null;
         game.tieSoldierP1.item = null;
       } else {
-        // winner
         const winnerIndex = (result === 1) ? 0 : 1;
         const winnerSoldier = (winnerIndex === 0 ? game.tieSoldierP0 : game.tieSoldierP1);
         game.board[winnerSoldier.row][winnerSoldier.col] = {
@@ -520,10 +475,11 @@ io.on("connection", (socket) => {
         game.waitingForTieBreak = false;
         game.tieSoldierP0 = null;
         game.tieSoldierP1 = null;
+
         endTurn(game);
         io.to(gameId).emit("updateGame", game);
 
-        // bot might move after tie break if still playing
+        // if bot game
         if (game.isBotGame && game.state === "playing" && !game.winner) {
           if (game.currentPlayerIndex === 1) {
             botMakeMove(game);
@@ -536,13 +492,12 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 8) Replay
+  // Replay
   socket.on("requestReplay", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
-    if (game.state !== "finished") return; // only allow if game ended
+    if (game.state !== "finished") return;
 
-    // reset board to "setup"
     const board = createEmptyBoard();
     if (game.isBotGame) {
       initializeBoardWithBot(board);
@@ -556,15 +511,15 @@ io.on("connection", (socket) => {
     game.tieSoldierP1 = null;
     game.state = "setup";
     game.winner = null;
-    game.players.forEach((p, idx) => {
-      p.reshuffles = 3;
-      p.ready = (game.isBotGame && idx === 1) ? true : false; // bot is always ready
+    game.players.forEach((pl, i) => {
+      pl.reshuffles = 3;
+      pl.ready = (game.isBotGame && i === 1) ? true : false;
     });
 
     io.to(gameId).emit("updateGame", game);
   });
 
-  // 9) Exit to Lobby
+  // Exit
   socket.on("exitToLobby", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
@@ -573,7 +528,7 @@ io.on("connection", (socket) => {
     if (user) user.inGame = false;
 
     if (!game.isBotGame) {
-      // If 2-player, notify the other
+      // 2p
       const other = game.players.find(p => p.socketId !== socket.id);
       if (other && other.socketId !== "BOT") {
         const otherUser = lobbyUsers.get(other.socketId);
@@ -581,29 +536,26 @@ io.on("connection", (socket) => {
         io.to(other.socketId).emit("updateGame", {
           ...game,
           state: "finished",
-          winner: "abandoned",
+          winner: "abandoned"
         });
         io.sockets.sockets.get(other.socketId)?.leave(gameId);
       }
     }
     ongoingGames.delete(gameId);
     io.sockets.sockets.get(socket.id)?.leave(gameId);
-
     updateLobby();
     io.to(socket.id).emit("returnedToLobby");
   });
 
-  // 10) Disconnect
+  // Disconnect
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
     const user = lobbyUsers.get(socket.id);
     if (!user) return;
-
     user.inGame = false;
     lobbyUsers.delete(socket.id);
 
-    // if in a game => forfeit
-    const gameId = Array.from(ongoingGames.keys()).find((id) =>
+    const gameId = Array.from(ongoingGames.keys()).find(id =>
       ongoingGames.get(id).players.some(p => p.socketId === socket.id)
     );
     if (gameId) {
@@ -613,11 +565,11 @@ io.on("connection", (socket) => {
         const otherIndex = game.players.findIndex(p => p.socketId !== socket.id);
         if (otherIndex >= 0) {
           game.winner = game.players[otherIndex].username + " (by forfeit)";
-          const otherSocketId = game.players[otherIndex].socketId;
-          if (otherSocketId !== "BOT") {
-            const otherUser = lobbyUsers.get(otherSocketId);
-            if (otherUser) otherUser.inGame = false;
-            io.to(otherSocketId).emit("updateGame", game);
+          const otherSid = game.players[otherIndex].socketId;
+          if (otherSid !== "BOT") {
+            const ouser = lobbyUsers.get(otherSid);
+            if (ouser) ouser.inGame = false;
+            io.to(otherSid).emit("updateGame", game);
           }
         } else {
           game.winner = "abandoned";
@@ -625,15 +577,12 @@ io.on("connection", (socket) => {
         ongoingGames.delete(gameId);
       }
     }
-
     updateLobby();
   });
 });
 
-// ---------------------------------------
-// Start the server
-// ---------------------------------------
+// Start
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("Server running on port " + PORT);
 });
