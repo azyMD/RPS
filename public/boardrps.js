@@ -1,35 +1,35 @@
 (() => {
   const socket = io();
 
-  // DOM references
+  // DOM
   const loginContainer = document.getElementById("loginContainer");
   const usernameInput = document.getElementById("usernameInput");
   const joinBtn = document.getElementById("joinBtn");
 
   const lobbyContainer = document.getElementById("lobbyContainer");
   const usersList = document.getElementById("usersList");
+  const playBotBtn = document.getElementById("playBotBtn");
 
   const gameContainer = document.getElementById("gameContainer");
   const gameStatus = document.getElementById("gameStatus");
   const reshuffleBtn = document.getElementById("reshuffleBtn");
   const readyBtn = document.getElementById("readyBtn");
   const turnInfo = document.getElementById("turnInfo");
-
-  const topPlayerName = document.getElementById("topPlayerName");
-  const bottomPlayerName = document.getElementById("bottomPlayerName");
   const boardElement = document.getElementById("board");
+  const replayBtn = document.getElementById("replayBtn");
+  const exitLobbyBtn = document.getElementById("exitLobbyBtn");
 
   const tieBreakModal = document.getElementById("tieBreakModal");
   const tieBtns = document.querySelectorAll(".tie-btn");
   const tieMessage = document.getElementById("tieMessage");
 
-  // State
+  // Local state
   let currentGame = null;
-  let myPlayerIndex = null; // 0 or 1
-  let selectedCell = null;  // { row, col } of the soldier you want to move
+  let myPlayerIndex = null;  // 0 or 1
+  let selectedCell = null;
 
   // ---------------------------
-  // 1) Join Lobby
+  // 1) Lobby / Login
   // ---------------------------
   joinBtn.addEventListener("click", () => {
     const username = usernameInput.value.trim();
@@ -42,7 +42,6 @@
     lobbyContainer.classList.remove("hidden");
   });
 
-  // Render Lobby Data
   socket.on("lobbyData", (users) => {
     usersList.innerHTML = "";
     users.forEach((user) => {
@@ -51,7 +50,6 @@
       if (user.inGame) txt += " (in-game)";
       li.textContent = txt;
 
-      // Challenge button if user is free and not me
       if (!user.inGame && user.socketId !== socket.id) {
         const challengeBtn = document.createElement("button");
         challengeBtn.textContent = "Challenge";
@@ -66,7 +64,7 @@
     });
   });
 
-  // Handle Challenge Request
+  // Challenge
   socket.on("challengeRequest", ({ from, fromUsername }) => {
     const accept = confirm(`${fromUsername} challenged you! Accept?`);
     socket.emit("challengeResponse", { from, accepted: accept });
@@ -77,11 +75,18 @@
   });
 
   // ---------------------------
-  // 2) Start Game
+  // 2) Play with Bot
+  // ---------------------------
+  playBotBtn.addEventListener("click", () => {
+    socket.emit("playWithBot");
+  });
+
+  // ---------------------------
+  // 3) Start Game
   // ---------------------------
   socket.on("startGame", (gameState) => {
     currentGame = gameState;
-    // Determine if I'm player0 or player1
+    // Find out if I'm player0 or player1
     myPlayerIndex = currentGame.players.findIndex(p => p.socketId === socket.id);
 
     lobbyContainer.classList.add("hidden");
@@ -91,20 +96,20 @@
   });
 
   // ---------------------------
-  // 3) Update Game
+  // 4) Update Game
   // ---------------------------
   socket.on("updateGame", (gameState) => {
     currentGame = gameState;
     renderGame();
   });
 
-  // Tie again signal
+  // If tie again
   socket.on("tieAgain", () => {
     tieMessage.textContent = "Tie again! Pick another item.";
   });
 
   // ---------------------------
-  // 4) Reshuffle & Ready
+  // 5) Reshuffle & Ready
   // ---------------------------
   reshuffleBtn.addEventListener("click", () => {
     if (!currentGame) return;
@@ -117,21 +122,26 @@
   });
 
   // ---------------------------
-  // 5) Render the Board / UI
+  // 6) Render Game
   // ---------------------------
   function renderGame() {
     if (!currentGame) return;
 
-    // Game status
+    // Show status
     if (currentGame.state === "setup") {
       gameStatus.textContent = "Setup phase (You can reshuffle, then click Ready)";
       reshuffleBtn.disabled = false;
       readyBtn.disabled = false;
+      replayBtn.classList.add("hidden");
+      exitLobbyBtn.classList.add("hidden");
     } else if (currentGame.state === "playing") {
       gameStatus.textContent = "Playing";
       reshuffleBtn.disabled = true;
       readyBtn.disabled = true;
+      replayBtn.classList.add("hidden");
+      exitLobbyBtn.classList.add("hidden");
     } else if (currentGame.state === "finished") {
+      // Show winner if any
       if (currentGame.winner) {
         gameStatus.textContent = `Game Over! Winner: ${currentGame.winner}`;
       } else {
@@ -139,9 +149,11 @@
       }
       reshuffleBtn.disabled = true;
       readyBtn.disabled = true;
+      replayBtn.classList.remove("hidden");
+      exitLobbyBtn.classList.remove("hidden");
     }
 
-    // Update reshuffle button text
+    // Update reshuffle text
     const me = currentGame.players[myPlayerIndex];
     if (me) {
       reshuffleBtn.textContent = `Reshuffle (${me.reshuffles} left)`;
@@ -155,73 +167,38 @@
       turnInfo.textContent = "";
     }
 
-    // Show player names at top/bottom
-    const p0name = currentGame.players[0].username;
-    const p1name = currentGame.players[1].username;
-    if (myPlayerIndex === 0) {
-      // I'm player0 => top is player1, bottom is me
-      topPlayerName.textContent = p1name;
-      bottomPlayerName.textContent = p0name;
-    } else {
-      // I'm player1 => top is player0, bottom is me
-      topPlayerName.textContent = p0name;
-      bottomPlayerName.textContent = p1name;
-    }
-
-    // Clear the board
+    // Render board
     boardElement.innerHTML = "";
 
-    // We want to flip the board so each player sees their soldiers at the bottom.
-    // Player0 physically occupies rows 0..1 (top) => we invert the row order for them.
-    // Player1 physically occupies rows 4..5 (bottom) => no flip needed if they see it "as is."
-    let rowSequence;
-    if (myPlayerIndex === 0) {
-      // Show row5 first, down to row0
-      rowSequence = [5, 4, 3, 2, 1, 0];
-    } else {
-      // Normal top-to-bottom
-      rowSequence = [0, 1, 2, 3, 4, 5];
-    }
-
-    const board = currentGame.board;
-    for (let r of rowSequence) {
+    // We'll not do the "flip" logic in this version, but you can re-implement if you want each user to see themselves at bottom:
+    for (let r = 0; r < 6; r++) {
       for (let c = 0; c < 7; c++) {
         const cellDiv = document.createElement("div");
         cellDiv.classList.add("cell");
-        // Store real row/col for click events
         cellDiv.dataset.row = r;
         cellDiv.dataset.col = c;
 
-        const cellData = board[r][c];
+        const cellData = currentGame.board[r][c];
         if (cellData) {
-          const { owner, item, revealed } = cellData;
-          if (owner !== null) {
-            cellDiv.classList.add(`owner${owner}`);
-          }
-          // Show the soldier's item if:
-          // (a) It's mine, or
-          // (b) It's revealed, or
-          // (c) It's "tie" placeholder
-          if (owner === myPlayerIndex) {
-            // Always see my item
-            cellDiv.textContent = item[0].toUpperCase();
-          } else {
-            // Enemy soldier => show if revealed
-            if (item === "tie") {
+          // color by owner
+          cellDiv.classList.add(`owner${cellData.owner}`);
+          // if it's revealed or belongs to me, show item
+          if (cellData.owner === myPlayerIndex || cellData.revealed || cellData.item === "tie") {
+            if (cellData.item === "tie") {
               cellDiv.textContent = "TIE";
-            } else if (revealed) {
-              cellDiv.textContent = item[0].toUpperCase();
             } else {
-              cellDiv.textContent = "?";
+              cellDiv.textContent = cellData.item[0].toUpperCase();
             }
+          } else {
+            cellDiv.textContent = "?";
           }
         }
 
-        // If it's my turn, let me pick or move
+        // If it's my turn, let me move
         if (
           currentGame.state === "playing" &&
-          currentGame.currentPlayerIndex === myPlayerIndex &&
           !currentGame.waitingForTieBreak &&
+          currentGame.currentPlayerIndex === myPlayerIndex &&
           currentGame.state !== "finished"
         ) {
           cellDiv.addEventListener("click", onCellClick);
@@ -240,23 +217,20 @@
     }
   }
 
-  // ---------------------------
-  // 6) Board Click Handling
-  // ---------------------------
   function onCellClick(e) {
     const cell = e.currentTarget;
     const row = parseInt(cell.dataset.row, 10);
     const col = parseInt(cell.dataset.col, 10);
 
-    // If we haven't selected a soldier yet, check if this cell is my soldier
     if (!selectedCell) {
+      // If there's a soldier of mine
       const occupant = currentGame.board[row][col];
       if (occupant && occupant.owner === myPlayerIndex) {
         selectedCell = { row, col };
         cell.style.outline = "2px solid red";
       }
     } else {
-      // We already have a soldier selected, so this cell is the destination
+      // This click is the destination
       const fromRow = selectedCell.row;
       const fromCol = selectedCell.col;
 
@@ -268,19 +242,18 @@
         toCol: col
       });
 
-      // Clear selection
       selectedCell = null;
-      renderGame(); // Re-render to remove the red outline, etc.
+      renderGame();
     }
   }
 
   // ---------------------------
-  // 7) Tie Break: re-pick items
+  // 7) Tie break
   // ---------------------------
   tieBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
       if (!currentGame) return;
-      const newItem = btn.dataset.item; // "rock" / "paper" / "scissors"
+      const newItem = btn.dataset.item;
       socket.emit("tieBreakChoice", {
         gameId: currentGame.gameId,
         newItem
@@ -289,7 +262,31 @@
   });
 
   // ---------------------------
-  // Global Error Handling
+  // 8) Replay
+  // ---------------------------
+  replayBtn.addEventListener("click", () => {
+    if (!currentGame) return;
+    socket.emit("requestReplay", { gameId: currentGame.gameId });
+  });
+
+  // ---------------------------
+  // 9) Exit to Lobby
+  // ---------------------------
+  exitLobbyBtn.addEventListener("click", () => {
+    if (!currentGame) return;
+    socket.emit("exitToLobby", { gameId: currentGame.gameId });
+  });
+
+  socket.on("returnedToLobby", () => {
+    gameContainer.classList.add("hidden");
+    lobbyContainer.classList.remove("hidden");
+    currentGame = null;
+    myPlayerIndex = null;
+    selectedCell = null;
+  });
+
+  // ---------------------------
+  // Global errors
   // ---------------------------
   socket.on("errorOccurred", (msg) => {
     alert(msg);
