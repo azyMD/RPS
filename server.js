@@ -12,15 +12,15 @@ app.use(express.static(path.join(__dirname, "public")));
 // Lobby: track { socketId => { username, inGame: false } }
 const lobbyUsers = new Map();
 
-// Ongoing games: { gameId => gameState }
+// Ongoing board games: { gameId => gameState }
 const ongoingGames = new Map();
 
-// Generate a random game ID
+// Generate random game ID
 function generateGameId() {
   return "game_" + Math.random().toString(36).substr(2, 8);
 }
 
-// Create an empty 7×6 RPS board
+// Create empty 7x6 board
 function createEmptyBoard() {
   const rows = 6;
   const cols = 7;
@@ -53,23 +53,23 @@ function compareItems(item1, item2) {
   return 2;
 }
 
-// Initialize the board with each player's soldiers in two rows
-function initializeBoardForPlayers(board, player0Index = 0, player1Index = 1) {
-  // Player0 => rows 0..1
+// Initialize a new board for the 2 human players
+function initializeBoardForPlayers(board) {
+  // Player 0 => rows 0..1
   for (let r = 0; r < 2; r++) {
     for (let c = 0; c < 7; c++) {
       board[r][c] = {
-        owner: player0Index,
+        owner: 0,
         item: randomItem(),
         revealed: false
       };
     }
   }
-  // Player1 => rows 4..5
+  // Player 1 => rows 4..5
   for (let r = 4; r < 6; r++) {
     for (let c = 0; c < 7; c++) {
       board[r][c] = {
-        owner: player1Index,
+        owner: 1,
         item: randomItem(),
         revealed: false
       };
@@ -77,162 +77,135 @@ function initializeBoardForPlayers(board, player0Index = 0, player1Index = 1) {
   }
 }
 
-// Check if one player lost all soldiers => game over
-function checkForWinner(game) {
-  const board = game.board;
-  let p0Count = 0, p1Count = 0;
-  for (let r = 0; r < 6; r++) {
+// Initialize a new board for "Play with Bot"
+function initializeBoardWithBot(board) {
+  // We treat "bot" as player1 => rows 4..5
+  // The human is player0 => rows 0..1
+  for (let r = 0; r < 2; r++) {
     for (let c = 0; c < 7; c++) {
-      const cell = board[r][c];
-      if (cell) {
-        if (cell.owner === 0) p0Count++;
-        if (cell.owner === 1) p1Count++;
-      }
+      board[r][c] = {
+        owner: 0, // human
+        item: randomItem(),
+        revealed: false
+      };
     }
   }
-  if (p0Count === 0) {
-    game.winner = game.players[1].username;
-    return true;
+  for (let r = 4; r < 6; r++) {
+    for (let c = 0; c < 7; c++) {
+      board[r][c] = {
+        owner: 1, // bot
+        item: randomItem(),
+        revealed: false
+      };
+    }
   }
-  if (p1Count === 0) {
-    game.winner = game.players[0].username;
-    return true;
-  }
-  return false;
 }
 
-/**
- * Naive Bot AI: picks a random soldier belonging to botIndex, tries random adjacent moves.
- * If no moves are valid, does nothing. This code is purely illustrative.
- */
+// Randomly move a single "bot" soldier
 function botMakeMove(game) {
-  const botIndex = 1; // We assume player[1] is the BOT
+  // The bot is playerIndex=1
+  // We'll pick all possible moves for the bot, then pick one at random
+  const moves = getAllPossibleMoves(game, 1);
+  if (moves.length === 0) return; // no move possible
+  const choice = moves[Math.floor(Math.random() * moves.length)];
+  // Perform the move
+  // This re-uses the same logic as "playerMove," but we can do it inline:
   const board = game.board;
+  const fromCell = board[choice.fromRow][choice.fromCol];
+  board[choice.fromRow][choice.fromCol] = null;
+  const targetCell = board[choice.toRow][choice.toCol];
 
-  // Collect all bot soldiers
-  const botCells = [];
-  for (let r = 0; r < 6; r++) {
-    for (let c = 0; c < 7; c++) {
-      if (board[r][c] && board[r][c].owner === botIndex) {
-        botCells.push({ row: r, col: c });
-      }
-    }
-  }
-
-  // Shuffle the soldiers array
-  shuffle(botCells);
-
-  // Attempt a random move
-  const directions = [
-    { dr: -1, dc: 0 },  { dr: 1, dc: 0 },
-    { dr: 0, dc: -1 },  { dr: 0, dc: 1 },
-    { dr: -1, dc: -1 }, { dr: -1, dc: 1 },
-    { dr: 1, dc: -1 },  { dr: 1, dc: 1 }
-  ];
-
-  for (let soldier of botCells) {
-    // Randomize directions
-    shuffle(directions);
-
-    for (let dir of directions) {
-      const nr = soldier.row + dir.dr;
-      const nc = soldier.col + dir.dc;
-      if (isValidMove(board, botIndex, soldier.row, soldier.col, nr, nc)) {
-        // Perform that move as if the bot is calling "playerMove"
-        doPlayerMove(game, botIndex, soldier.row, soldier.col, nr, nc);
-        return;
-      }
-    }
-  }
-}
-
-// Utility to shuffle an array in place
-function shuffle(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-}
-
-// Check if move is valid
-function isValidMove(board, playerIndex, fromR, fromC, toR, toC) {
-  if (toR < 0 || toR > 5 || toC < 0 || toC > 6) return false;
-  if (Math.abs(toR - fromR) > 1 || Math.abs(toC - fromC) > 1) return false;
-
-  const soldierCell = board[fromR][fromC];
-  if (!soldierCell || soldierCell.owner !== playerIndex) return false;
-
-  const targetCell = board[toR][toC];
-  if (targetCell && targetCell.owner === playerIndex) return false; // can't move onto friendly soldier
-
-  return true;
-}
-
-// Actually perform the move. This reuses the same logic as "playerMove" but in function form.
-function doPlayerMove(game, playerIndex, fromRow, fromCol, toRow, toCol) {
-  const board = game.board;
-  const soldierCell = board[fromRow][fromCol];
-  board[fromRow][fromCol] = null;
-
-  const targetCell = board[toRow][toCol];
   if (!targetCell) {
-    // Just move
-    board[toRow][toCol] = {
-      owner: playerIndex,
-      item: soldierCell.item,
-      revealed: soldierCell.revealed
+    // empty cell
+    board[choice.toRow][choice.toCol] = {
+      owner: 1,
+      item: fromCell.item,
+      revealed: fromCell.revealed
     };
     endTurn(game);
   } else {
-    // Combat
-    const result = compareItems(soldierCell.item, targetCell.item);
+    // combat
+    const result = compareItems(fromCell.item, targetCell.item);
     if (result === 0) {
-      // tie => tie break
+      // tie -> tie break
+      // We'll do an automatic tie break for the bot (random again).
       game.waitingForTieBreak = true;
-      // Store tie info
-      if (playerIndex === 0) {
-        game.tieSoldierP0 = { row: toRow, col: toCol, item: soldierCell.item, revealed: true };
-        game.tieSoldierP1 = { row: toRow, col: toCol, item: targetCell.item, revealed: true };
-      } else {
-        game.tieSoldierP1 = { row: toRow, col: toCol, item: soldierCell.item, revealed: true };
-        game.tieSoldierP0 = { row: toRow, col: toCol, item: targetCell.item, revealed: true };
-      }
-      board[toRow][toCol] = { owner: null, item: "tie", revealed: true };
+      // attacker is p1, defender is occupant
+      game.tieSoldierP1 = {
+        row: choice.toRow,
+        col: choice.toCol,
+        item: fromCell.item,
+        revealed: true
+      };
+      game.tieSoldierP0 = {
+        row: choice.toRow,
+        col: choice.toCol,
+        item: targetCell.item,
+        revealed: true
+      };
+      board[choice.toRow][choice.toCol] = { owner: null, item: "tie", revealed: true };
     } else {
-      // There's a winner
       let winnerIndex, winnerItem;
       if (result === 1) {
-        winnerIndex = playerIndex;
-        winnerItem = soldierCell.item;
+        // p1's soldier wins
+        winnerIndex = 1;
+        winnerItem = fromCell.item;
       } else {
+        // occupant wins
         winnerIndex = targetCell.owner;
         winnerItem = targetCell.item;
       }
-      board[toRow][toCol] = { owner: winnerIndex, item: winnerItem, revealed: true };
+      board[choice.toRow][choice.toCol] = {
+        owner: winnerIndex,
+        item: winnerItem,
+        revealed: true
+      };
       endTurn(game);
     }
   }
 }
 
-// End the turn, check for a winner, possibly pass turn to next player or bot
-function endTurn(game) {
-  if (checkForWinner(game)) {
-    game.state = "finished";
-  } else {
-    game.currentPlayerIndex = (game.currentPlayerIndex + 1) % 2;
-    // If it's a bot game and it's now the bot's turn, let the bot move
-    if (game.isBotGame && game.currentPlayerIndex === 1 && !game.waitingForTieBreak && game.state !== "finished") {
-      botMakeMove(game);
+// Collect all valid moves for a given playerIndex
+function getAllPossibleMoves(game, playerIndex) {
+  const board = game.board;
+  const moves = [];
+  // For each soldier of that player, see which cells they can move to
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 7; c++) {
+      const cell = board[r][c];
+      if (cell && cell.owner === playerIndex) {
+        // check up to 8 directions
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue; // skip no-move
+            const nr = r + dr;
+            const nc = c + dc;
+            if (nr >= 0 && nr < 6 && nc >= 0 && nc < 7) {
+              const target = board[nr][nc];
+              // can't move onto friendly soldier
+              if (!target || target.owner !== playerIndex) {
+                moves.push({
+                  fromRow: r,
+                  fromCol: c,
+                  toRow: nr,
+                  toCol: nc
+                });
+              }
+            }
+          }
+        }
+      }
     }
   }
+  return moves;
 }
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // -----------------------
-  // Join Lobby
-  // -----------------------
+  // -----------------------------
+  // Lobby
+  // -----------------------------
   socket.on("joinLobby", (username) => {
     lobbyUsers.set(socket.id, { username, inGame: false });
     updateLobby();
@@ -247,9 +220,7 @@ io.on("connection", (socket) => {
     io.emit("lobbyData", usersList);
   }
 
-  // -----------------------
-  // Challenge Flow (2-Player)
-  // -----------------------
+  // Challenge another user (2-player)
   socket.on("challengeUser", (opponentSocketId) => {
     const challenger = lobbyUsers.get(socket.id);
     const opponent = lobbyUsers.get(opponentSocketId);
@@ -270,8 +241,7 @@ io.on("connection", (socket) => {
     if (accepted && !challenger.inGame && !responder.inGame) {
       const gameId = generateGameId();
       const board = createEmptyBoard();
-      // Player0 => "from", Player1 => "socket.id"
-      initializeBoardForPlayers(board, 0, 1);
+      initializeBoardForPlayers(board);
 
       const gameState = {
         gameId,
@@ -280,12 +250,13 @@ io.on("connection", (socket) => {
           { socketId: from, username: challenger.username, reshuffles: 3, ready: false },
           { socketId: socket.id, username: responder.username, reshuffles: 3, ready: false }
         ],
-        currentPlayerIndex: 0, // Player0 moves first
+        currentPlayerIndex: 0, // Player 0 moves first
         waitingForTieBreak: false,
         tieSoldierP0: null,
         tieSoldierP1: null,
         state: "setup",
-        isBotGame: false
+        winner: null,
+        isBotGame: false // Distinguish from bot game
       };
 
       ongoingGames.set(gameId, gameState);
@@ -304,30 +275,30 @@ io.on("connection", (socket) => {
     }
   });
 
-  // -----------------------
+  // -----------------------------
   // Play with Bot
-  // -----------------------
+  // -----------------------------
   socket.on("playWithBot", () => {
     const user = lobbyUsers.get(socket.id);
     if (!user || user.inGame) return;
 
     const gameId = generateGameId();
     const board = createEmptyBoard();
-    // Player0 => the user, Player1 => the bot
-    initializeBoardForPlayers(board, 0, 1);
+    initializeBoardWithBot(board); // place p0=human, p1=bot
 
     const gameState = {
       gameId,
       board,
       players: [
         { socketId: socket.id, username: user.username, reshuffles: 3, ready: false },
-        { socketId: "BOT", username: "Bot", reshuffles: 3, ready: false }
+        { socketId: "BOT", username: "Bot", reshuffles: 3, ready: true }
       ],
-      currentPlayerIndex: 0,
+      currentPlayerIndex: 0, // Human goes first
       waitingForTieBreak: false,
       tieSoldierP0: null,
       tieSoldierP1: null,
       state: "setup",
+      winner: null,
       isBotGame: true
     };
 
@@ -335,28 +306,30 @@ io.on("connection", (socket) => {
     user.inGame = true;
 
     io.sockets.sockets.get(socket.id)?.join(gameId);
+    // Start
     io.to(socket.id).emit("startGame", gameState);
     updateLobby();
   });
 
-  // -----------------------
+  // -----------------------------
   // Reshuffle
-  // -----------------------
+  // -----------------------------
   socket.on("requestReshuffle", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
     if (game.state !== "setup") return;
 
+    // If it's a bot game, only player0 can shuffle (the bot is always "ready").
     const playerIndex = game.players.findIndex((p) => p.socketId === socket.id);
     if (playerIndex < 0) return;
-
     const player = game.players[playerIndex];
     if (player.reshuffles <= 0) return;
 
     player.reshuffles--;
 
-    // Re‐randomize that player's 2 rows
+    // Re-randomize that player's rows
     const rowsToShuffle = (playerIndex === 0) ? [0,1] : [4,5];
+    // But if it's a bot game and I'm p0, the bot is p1 => that is [4,5]. So watch out:
     rowsToShuffle.forEach(r => {
       for (let c = 0; c < 7; c++) {
         const cell = game.board[r][c];
@@ -370,9 +343,9 @@ io.on("connection", (socket) => {
     io.to(gameId).emit("updateGame", game);
   });
 
-  // -----------------------
+  // -----------------------------
   // Player Ready
-  // -----------------------
+  // -----------------------------
   socket.on("playerReady", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
@@ -380,16 +353,10 @@ io.on("connection", (socket) => {
 
     const playerIndex = game.players.findIndex((p) => p.socketId === socket.id);
     if (playerIndex < 0) return;
+
     game.players[playerIndex].ready = true;
 
-    // If both players (or user+bot) are ready, switch to "playing"
-    // For the bot, we can just auto-ready the bot
-    if (game.isBotGame) {
-      // Bot is always "ready"
-      game.players[1].ready = true;
-    }
-
-    // Check if everyone is ready
+    // If it's a bot game, the bot is automatically ready. Or if both players are ready in a 2p game:
     if (game.players.every(p => p.ready)) {
       game.state = "playing";
     }
@@ -397,36 +364,158 @@ io.on("connection", (socket) => {
     io.to(gameId).emit("updateGame", game);
   });
 
-  // -----------------------
+  // -----------------------------
   // Handle Moves
-  // -----------------------
+  // -----------------------------
   socket.on("playerMove", ({ gameId, fromRow, fromCol, toRow, toCol }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
     if (game.state !== "playing") return;
-    if (game.waitingForTieBreak) return;
+    if (game.waitingForTieBreak) return; // can't move in tie break
 
     const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
+    if (playerIndex < 0) return;
     if (playerIndex !== game.currentPlayerIndex) return;
 
-    // Perform the move
-    if (!isValidMove(game.board, playerIndex, fromRow, fromCol, toRow, toCol)) {
-      console.log("Invalid move attempt");
+    const board = game.board;
+    const soldierCell = board[fromRow][fromCol];
+    if (!soldierCell || soldierCell.owner !== playerIndex) return;
+
+    // Check 1-cell move
+    if (Math.abs(toRow - fromRow) > 1 || Math.abs(toCol - fromCol) > 1) {
+      console.log("Invalid move: 1 cell in any direction only.");
+      return;
+    }
+    if (toRow < 0 || toRow > 5 || toCol < 0 || toCol > 6) {
+      console.log("Out of bounds.");
       return;
     }
 
-    doPlayerMove(game, playerIndex, fromRow, fromCol, toRow, toCol);
+    // Friendly occupant check
+    const targetCell = board[toRow][toCol];
+    if (targetCell && targetCell.owner === playerIndex) {
+      console.log("Can't move onto a friendly soldier.");
+      return;
+    }
+
+    // Move
+    board[fromRow][fromCol] = null;
+
+    if (!targetCell) {
+      // Empty cell
+      board[toRow][toCol] = {
+        owner: playerIndex,
+        item: soldierCell.item,
+        revealed: soldierCell.revealed
+      };
+      endTurn(game);
+    } else {
+      // Combat
+      const result = compareItems(soldierCell.item, targetCell.item);
+      if (result === 0) {
+        // tie -> tie break
+        game.waitingForTieBreak = true;
+        if (playerIndex === 0) {
+          game.tieSoldierP0 = {
+            row: toRow,
+            col: toCol,
+            item: soldierCell.item,
+            revealed: true
+          };
+          game.tieSoldierP1 = {
+            row: toRow,
+            col: toCol,
+            item: targetCell.item,
+            revealed: true
+          };
+        } else {
+          game.tieSoldierP1 = {
+            row: toRow,
+            col: toCol,
+            item: soldierCell.item,
+            revealed: true
+          };
+          game.tieSoldierP0 = {
+            row: toRow,
+            col: toCol,
+            item: targetCell.item,
+            revealed: true
+          };
+        }
+        board[toRow][toCol] = { owner: null, item: "tie", revealed: true };
+      } else {
+        // There's a winner
+        let winnerIndex;
+        let winnerItem;
+        if (result === 1) {
+          winnerIndex = playerIndex;
+          winnerItem = soldierCell.item;
+        } else {
+          winnerIndex = targetCell.owner;
+          winnerItem = targetCell.item;
+        }
+        board[toRow][toCol] = {
+          owner: winnerIndex,
+          item: winnerItem,
+          revealed: true
+        };
+        endTurn(game);
+      }
+    }
     io.to(gameId).emit("updateGame", game);
+
+    // If it's a bot game, let the bot move if the game isn't done
+    if (game.isBotGame && !game.waitingForTieBreak && game.state === "playing") {
+      // If the human didn't lose just now
+      if (!game.winner && game.currentPlayerIndex === 1) {
+        // Bot turn
+        botMakeMove(game);
+        io.to(gameId).emit("updateGame", game);
+      }
+    }
   });
 
-  // -----------------------
+  function endTurn(game) {
+    // Check if someone has 0 soldiers
+    if (checkForWinner(game)) {
+      game.state = "finished";
+    } else {
+      game.currentPlayerIndex = (game.currentPlayerIndex + 1) % 2;
+    }
+  }
+
+  function checkForWinner(game) {
+    const board = game.board;
+    let p0Count = 0, p1Count = 0;
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 7; c++) {
+        const cell = board[r][c];
+        if (cell) {
+          if (cell.owner === 0) p0Count++;
+          if (cell.owner === 1) p1Count++;
+        }
+      }
+    }
+    if (p0Count === 0) {
+      game.winner = game.players[1].username;
+      return true;
+    }
+    if (p1Count === 0) {
+      game.winner = game.players[0].username;
+      return true;
+    }
+    return false;
+  }
+
+  // -----------------------------
   // Tie-Break re-pick
-  // -----------------------
+  // -----------------------------
   socket.on("tieBreakChoice", ({ gameId, newItem }) => {
     const game = ongoingGames.get(gameId);
-    if (!game || !game.waitingForTieBreak) return;
+    if (!game) return;
+    if (!game.waitingForTieBreak) return;
 
-    const playerIndex = game.players.findIndex((p) => p.socketId === socket.id);
+    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
     if (playerIndex < 0) return;
 
     if (playerIndex === 0) {
@@ -435,99 +524,100 @@ io.on("connection", (socket) => {
       game.tieSoldierP1.item = newItem;
     }
 
-    resolveTieBreak(game);
-    io.to(gameId).emit("updateGame", game);
+    // If both picked
+    if (game.tieSoldierP0.item && game.tieSoldierP1.item) {
+      const result = compareItems(game.tieSoldierP0.item, game.tieSoldierP1.item);
+      if (result === 0) {
+        // tie again
+        io.to(gameId).emit("tieAgain", game);
+        // Clear items so they can pick again
+        game.tieSoldierP0.item = null;
+        game.tieSoldierP1.item = null;
+      } else {
+        // we have a winner
+        const winnerIndex = (result === 1) ? 0 : 1;
+        const loserIndex = 1 - winnerIndex;
+        const winnerSoldier = (winnerIndex === 0 ? game.tieSoldierP0 : game.tieSoldierP1);
+
+        game.board[winnerSoldier.row][winnerSoldier.col] = {
+          owner: winnerIndex,
+          item: winnerSoldier.item,
+          revealed: true
+        };
+        game.waitingForTieBreak = false;
+        game.tieSoldierP0 = null;
+        game.tieSoldierP1 = null;
+
+        endTurn(game);
+        io.to(gameId).emit("updateGame", game);
+
+        // If it's a bot game and the bot lost/won in the tie break, see if game continues
+        if (game.isBotGame && game.state === "playing" && !game.winner) {
+          // If it’s now the bot’s turn
+          if (game.currentPlayerIndex === 1) {
+            botMakeMove(game);
+            io.to(gameId).emit("updateGame", game);
+          }
+        }
+      }
+    } else {
+      // One soldier still hasn't picked
+      io.to(gameId).emit("updateGame", game);
+    }
   });
 
-  // If the bot is in tie break, we’ll handle it automatically in `resolveTieBreak` if needed
-  function resolveTieBreak(game) {
-    // If one soldier item is still null, wait for the other pick
-    if (!game.tieSoldierP0.item || !game.tieSoldierP1.item) return;
-
-    const result = compareItems(game.tieSoldierP0.item, game.tieSoldierP1.item);
-    if (result === 0) {
-      // tie again
-      io.to(game.gameId).emit("tieAgain", game);
-      game.tieSoldierP0.item = null;
-      game.tieSoldierP1.item = null;
-
-      // If the bot is one side, pick automatically
-      pickTieForBotIfNeeded(game);
-      return;
-    }
-
-    // We have a winner
-    const winnerIndex = (result === 1) ? 0 : 1;
-    const winnerSoldier = (winnerIndex === 0 ? game.tieSoldierP0 : game.tieSoldierP1);
-    game.board[winnerSoldier.row][winnerSoldier.col] = {
-      owner: winnerIndex,
-      item: winnerSoldier.item,
-      revealed: true
-    };
-
-    // Clear tie
-    game.waitingForTieBreak = false;
-    game.tieSoldierP0 = null;
-    game.tieSoldierP1 = null;
-
-    endTurn(game);
-  }
-
-  // Let the bot automatically pick a tie break item if it’s part of the tie
-  function pickTieForBotIfNeeded(game) {
-    if (!game.isBotGame) return;
-    // If tieSoldierP0 or tieSoldierP1 belongs to the bot, pick a random item
-    // The bot is always index=1
-    if (game.tieSoldierP1 && !game.tieSoldierP1.item) {
-      game.tieSoldierP1.item = randomItem();
-    }
-  }
-
-  // -----------------------
+  // -----------------------------
   // Replay
-  // -----------------------
+  // -----------------------------
   socket.on("requestReplay", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
+    if (game.state !== "finished") {
+      // Only allow replay if game is done
+      return;
+    }
 
-    // Reset the entire board
-    game.board = createEmptyBoard();
-    initializeBoardForPlayers(game.board); // Re-randomize
-    game.state = "setup";
+    // Reset everything
+    const board = createEmptyBoard();
+    if (game.isBotGame) {
+      // re-init with bot
+      initializeBoardWithBot(board);
+    } else {
+      initializeBoardForPlayers(board);
+    }
+
+    game.board = board;
     game.currentPlayerIndex = 0;
     game.waitingForTieBreak = false;
     game.tieSoldierP0 = null;
     game.tieSoldierP1 = null;
+    game.state = "setup";  // Let's set it back to setup, so they can reshuffle if they want
     game.winner = null;
 
-    // Reset each player's reshuffles & ready
-    game.players.forEach((p) => {
+    // Reset each player's stats
+    game.players.forEach((p, idx) => {
       p.reshuffles = 3;
-      p.ready = false;
+      p.ready = (game.isBotGame && idx === 1) ? true : false; // bot is always ready
     });
 
     io.to(gameId).emit("updateGame", game);
   });
 
-  // -----------------------
+  // -----------------------------
   // Exit to Lobby
-  // -----------------------
+  // -----------------------------
   socket.on("exitToLobby", ({ gameId }) => {
     const game = ongoingGames.get(gameId);
     if (!game) return;
 
-    // Mark this user as not in game
+    // Mark user as not in game
     const user = lobbyUsers.get(socket.id);
     if (user) {
       user.inGame = false;
     }
 
-    if (game.isBotGame) {
-      // Bot game => just remove the game
-      ongoingGames.delete(gameId);
-      io.sockets.sockets.get(socket.id)?.leave(gameId);
-    } else {
-      // It's a 2-player game
+    if (!game.isBotGame) {
+      // 2-player game
       const other = game.players.find((p) => p.socketId !== socket.id);
       if (other && other.socketId !== "BOT") {
         const otherUser = lobbyUsers.get(other.socketId);
@@ -535,23 +625,24 @@ io.on("connection", (socket) => {
         // Let them know the game ended
         io.to(other.socketId).emit("updateGame", {
           ...game,
+          state: "finished",
           winner: "abandoned"
         });
         io.sockets.sockets.get(other.socketId)?.leave(gameId);
       }
-      ongoingGames.delete(gameId);
-      io.sockets.sockets.get(socket.id)?.leave(gameId);
     }
+    // Remove the game
+    ongoingGames.delete(gameId);
+    io.sockets.sockets.get(socket.id)?.leave(gameId);
 
     updateLobby();
-
-    // Send an event so client can switch UI
+    // Tell user they returned to lobby
     io.to(socket.id).emit("returnedToLobby");
   });
 
-  // -----------------------
+  // -----------------------------
   // Disconnect
-  // -----------------------
+  // -----------------------------
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
     const user = lobbyUsers.get(socket.id);
@@ -560,22 +651,24 @@ io.on("connection", (socket) => {
     user.inGame = false;
     lobbyUsers.delete(socket.id);
 
-    // If they were in a game
-    const gameId = Array.from(ongoingGames.keys()).find(id =>
-      ongoingGames.get(id).players.some(p => p.socketId === socket.id)
+    // If they were in a game, mark that as forfeit
+    const gameId = Array.from(ongoingGames.keys()).find((id) =>
+      ongoingGames.get(id).players.some((p) => p.socketId === socket.id)
     );
     if (gameId) {
       const game = ongoingGames.get(gameId);
       if (game && game.state !== "finished") {
         game.state = "finished";
-        const otherIndex = game.players.findIndex(p => p.socketId !== socket.id);
+        const otherIndex = game.players.findIndex((p) => p.socketId !== socket.id);
         if (otherIndex >= 0) {
           game.winner = game.players[otherIndex].username + " (by forfeit)";
-          // Mark the other user free
           const otherSocketId = game.players[otherIndex].socketId;
-          const otherUser = lobbyUsers.get(otherSocketId);
-          if (otherUser) otherUser.inGame = false;
-          io.to(otherSocketId).emit("updateGame", game);
+          // Let the other user know
+          if (otherSocketId !== "BOT") {
+            const otherUser = lobbyUsers.get(otherSocketId);
+            if (otherUser) otherUser.inGame = false;
+            io.to(otherSocketId).emit("updateGame", game);
+          }
         } else {
           game.winner = "abandoned";
         }
@@ -589,5 +682,5 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Server running on port", PORT);
 });
