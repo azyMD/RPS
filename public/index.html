@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Board RPS - Animated Soldiers</title>
+  <title>Board RPS (Chess Coloring + Flip + Animations)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -15,61 +15,50 @@
     }
     .hidden { display: none; }
 
-    /* We'll have a container for the 7x6 board, 350x300 (7*50 wide, 6*50 tall) */
-    #boardContainer {
-      position: relative;
-      width: 350px; /* 7 columns * 50px each */
-      height: 300px; /* 6 rows * 50px each */
-      border: 2px solid #333;
-      background: #eee; /* or a checkered pattern if you want */
+    /* We'll make a 6x7 "board" with .cell divs. Each row is a container. */
+    #board {
+      display: grid;
+      /* We won't define explicit columns/rows here; we'll generate them in JS. 
+         Or we do: grid-template-columns: repeat(7, 50px); 
+                  grid-template-rows: repeat(6, 50px); 
+         But we want to flip row order for player0, so let's build row-by-row in JS. */
+      gap: 2px;
       margin-top: 10px;
     }
-
-    /* We'll place a base grid overlay just to see cells if we want. 
-       Or we can keep it simple. */
-    .grid-cell {
-      position: absolute;
-      width: 50px; height: 50px;
-      border: 1px dashed #ccc;
-      box-sizing: border-box;
-    }
-
-    /* Each soldier is an absolutely positioned .soldier div with transitions */
-    .soldier {
-      position: absolute;
-      width: 48px; /* slightly smaller than cell, so we see borders */
-      height: 48px;
-      margin: 1px;
-      border-radius: 4px;
-      color: #000;
-      font-weight: bold;
+    .cell {
+      width: 50px;
+      height: 50px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: top 0.4s ease, left 0.4s ease, opacity 0.4s ease;
+      font-weight: bold;
+      border: 1px solid #999;
       cursor: pointer;
-      user-select: none;
+      transition: background-color 0.4s, color 0.4s;
     }
-    .soldier.owner0 { background-color: #dfd; }
-    .soldier.owner1 { background-color: #ddf; }
+    /* Chess coloring: we can do nth-child or use row/col logic. We'll do JS for color. */
+    .cell.chessLight { background-color: #fff; }
+    .cell.chessDark { background-color: #ddd; }
 
-    /* Tie occupant or unknown occupant can have different styling, if needed. */
+    /* If occupant is p0 or p1: highlight color */
+    .owner0 { background-color: #cfc !important; }
+    .owner1 { background-color: #ccf !important; }
 
-    /* For "removed" soldiers, we might fade them out with an .dying class */
-    .dying { opacity: 0; }
-
-    /* For "new" soldiers, we might animate from 0 opacity to 1 */
-    .new-soldier {
-      opacity: 0;
-      animation: fadeIn 0.4s forwards;
+    /* small highlight for changed occupant */
+    .changed {
+      animation: changedCell 0.4s;
     }
-    @keyframes fadeIn {
-      to { opacity: 1; }
+    @keyframes changedCell {
+      from { box-shadow: 0 0 10px #ffa; }
+      to   { box-shadow: none; }
     }
+
+    /* tie occupant or hidden occupant is handled in text. */
+
   </style>
 </head>
 <body>
-  <h1>Board RPS - Animated Soldiers</h1>
+  <h1>Board-Based RPS with Perspective Flip & Minimal Animation</h1>
 
   <div id="loginContainer">
     <h3>Enter your username</h3>
@@ -89,12 +78,11 @@
     <button id="readyBtn">Ready</button>
     <div id="turnInfo"></div>
 
-    <div id="boardContainer"></div>
+    <div id="board"></div>
 
     <button id="replayBtn" class="hidden">Replay</button>
     <button id="exitLobbyBtn" class="hidden">Exit to Lobby</button>
 
-    <!-- Tie break modal -->
     <div id="tieBreakModal" class="hidden" style="margin-top:10px; border:1px solid #aaa; padding:8px; background:#f4f4f4;">
       <p>It's a tie! Choose a new item:</p>
       <button data-item="rock" class="tie-btn">Rock</button>
