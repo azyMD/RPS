@@ -15,7 +15,7 @@
   const reshuffleBtn = document.getElementById("reshuffleBtn");
   const readyBtn = document.getElementById("readyBtn");
   const turnInfo = document.getElementById("turnInfo");
-  const boardElement = document.getElementById("board");
+  const boardContainer = document.getElementById("boardContainer");
   const replayBtn = document.getElementById("replayBtn");
   const exitLobbyBtn = document.getElementById("exitLobbyBtn");
 
@@ -23,10 +23,15 @@
   const tieBtns = document.querySelectorAll(".tie-btn");
   const tieMessage = document.getElementById("tieMessage");
 
-  // Local state
+  // Local states
   let currentGame = null;
-  let myPlayerIndex = null;  // 0 or 1
-  let selectedCell = null;
+  let myPlayerIndex = null;
+  let selectedSoldierId = null; // which soldier I'm currently moving
+  let soldiers = []; // array of { id, row, col, owner, item, revealed, element }
+
+  // Constants for cell size
+  const CELL_WIDTH = 50;
+  const CELL_HEIGHT = 50;
 
   // ---------------------------
   // 1) Lobby / Login
@@ -64,7 +69,6 @@
     });
   });
 
-  // Challenge
   socket.on("challengeRequest", ({ from, fromUsername }) => {
     const accept = confirm(`${fromUsername} challenged you! Accept?`);
     socket.emit("challengeResponse", { from, accepted: accept });
@@ -86,13 +90,16 @@
   // ---------------------------
   socket.on("startGame", (gameState) => {
     currentGame = gameState;
-    // Find out if I'm player0 or player1
     myPlayerIndex = currentGame.players.findIndex(p => p.socketId === socket.id);
 
     lobbyContainer.classList.add("hidden");
     gameContainer.classList.remove("hidden");
 
-    renderGame();
+    // Initialize or reset soldier array
+    soldiers = [];
+    updateSoldiersFromBoard(gameState.board);
+
+    renderUI();
   });
 
   // ---------------------------
@@ -100,10 +107,10 @@
   // ---------------------------
   socket.on("updateGame", (gameState) => {
     currentGame = gameState;
-    renderGame();
+    updateSoldiersFromBoard(gameState.board);
+    renderUI();
   });
 
-  // If tie again
   socket.on("tieAgain", () => {
     tieMessage.textContent = "Tie again! Pick another item.";
   });
@@ -122,12 +129,12 @@
   });
 
   // ---------------------------
-  // 6) Render Game
+  // 6) Render UI
   // ---------------------------
-  function renderGame() {
+  function renderUI() {
     if (!currentGame) return;
 
-    // Show status
+    // Status
     if (currentGame.state === "setup") {
       gameStatus.textContent = "Setup phase (You can reshuffle, then click Ready)";
       reshuffleBtn.disabled = false;
@@ -141,7 +148,6 @@
       replayBtn.classList.add("hidden");
       exitLobbyBtn.classList.add("hidden");
     } else if (currentGame.state === "finished") {
-      // Show winner if any
       if (currentGame.winner) {
         gameStatus.textContent = `Game Over! Winner: ${currentGame.winner}`;
       } else {
@@ -153,12 +159,6 @@
       exitLobbyBtn.classList.remove("hidden");
     }
 
-    // Update reshuffle text
-    const me = currentGame.players[myPlayerIndex];
-    if (me) {
-      reshuffleBtn.textContent = `Reshuffle (${me.reshuffles} left)`;
-    }
-
     // Turn info
     if (currentGame.state === "playing") {
       const currentP = currentGame.players[currentGame.currentPlayerIndex];
@@ -167,48 +167,7 @@
       turnInfo.textContent = "";
     }
 
-    // Render board
-    boardElement.innerHTML = "";
-
-    // We'll not do the "flip" logic in this version, but you can re-implement if you want each user to see themselves at bottom:
-    for (let r = 0; r < 6; r++) {
-      for (let c = 0; c < 7; c++) {
-        const cellDiv = document.createElement("div");
-        cellDiv.classList.add("cell");
-        cellDiv.dataset.row = r;
-        cellDiv.dataset.col = c;
-
-        const cellData = currentGame.board[r][c];
-        if (cellData) {
-          // color by owner
-          cellDiv.classList.add(`owner${cellData.owner}`);
-          // if it's revealed or belongs to me, show item
-          if (cellData.owner === myPlayerIndex || cellData.revealed || cellData.item === "tie") {
-            if (cellData.item === "tie") {
-              cellDiv.textContent = "TIE";
-            } else {
-              cellDiv.textContent = cellData.item[0].toUpperCase();
-            }
-          } else {
-            cellDiv.textContent = "?";
-          }
-        }
-
-        // If it's my turn, let me move
-        if (
-          currentGame.state === "playing" &&
-          !currentGame.waitingForTieBreak &&
-          currentGame.currentPlayerIndex === myPlayerIndex &&
-          currentGame.state !== "finished"
-        ) {
-          cellDiv.addEventListener("click", onCellClick);
-        }
-
-        boardElement.appendChild(cellDiv);
-      }
-    }
-
-    // Tie break modal
+    // Tie modal
     if (currentGame.waitingForTieBreak) {
       tieBreakModal.classList.remove("hidden");
       tieMessage.textContent = "";
@@ -217,38 +176,184 @@
     }
   }
 
-  function onCellClick(e) {
-    const cell = e.currentTarget;
-    const row = parseInt(cell.dataset.row, 10);
-    const col = parseInt(cell.dataset.col, 10);
+  // ---------------------------
+  // 7) Soldiers, partial re-render & animations
+  // ---------------------------
+  function updateSoldiersFromBoard(board) {
+    // Mark all existing soldiers as "seen" = false
+    soldiers.forEach(s => { s.seen = false; });
 
-    if (!selectedCell) {
-      // If there's a soldier of mine
-      const occupant = currentGame.board[row][col];
-      if (occupant && occupant.owner === myPlayerIndex) {
-        selectedCell = { row, col };
-        cell.style.outline = "2px solid red";
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 7; c++) {
+        const cell = board[r][c];
+        if (cell) {
+          const { soldierId, owner, item, revealed } = cell;
+          // Find existing soldier
+          let soldier = soldiers.find(s => s.id === soldierId);
+          if (soldier) {
+            // Mark as seen
+            soldier.seen = true;
+            // If position changed, animate
+            if (soldier.row !== r || soldier.col !== c) {
+              soldier.row = r;
+              soldier.col = c;
+              // We'll update DOM position
+              positionSoldierElement(soldier);
+            }
+            // Update item / revealed / owner
+            soldier.item = item;
+            soldier.revealed = revealed;
+            soldier.owner = owner;
+            updateSoldierContent(soldier);
+          } else {
+            // It's a new soldier
+            const newS = {
+              id: soldierId,
+              row: r,
+              col: c,
+              owner,
+              item,
+              revealed,
+              element: null, // we'll create it
+              seen: true
+            };
+            createSoldierElement(newS);
+            soldiers.push(newS);
+          }
+        }
       }
-    } else {
-      // This click is the destination
-      const fromRow = selectedCell.row;
-      const fromCol = selectedCell.col;
+    }
 
-      socket.emit("playerMove", {
-        gameId: currentGame.gameId,
-        fromRow,
-        fromCol,
-        toRow: row,
-        toCol: col
-      });
+    // Soldiers that were not "seen" => they've been removed
+    soldiers
+      .filter(s => !s.seen)
+      .forEach(soldier => removeSoldierElement(soldier));
 
-      selectedCell = null;
-      renderGame();
+    // Purge them from the array
+    soldiers = soldiers.filter(s => s.seen);
+  }
+
+  function createSoldierElement(soldier) {
+    const el = document.createElement("div");
+    el.classList.add("soldier", "new-soldier");
+    el.classList.add(`owner${soldier.owner}`);
+    // set text
+    updateSoldierContent({ ...soldier, element: el });
+
+    // place it
+    el.style.left = soldier.col * CELL_WIDTH + "px";
+    el.style.top = soldier.row * CELL_HEIGHT + "px";
+
+    // add event listener if it's my turn to pick
+    el.addEventListener("click", () => onSoldierClick(soldier.id));
+
+    boardContainer.appendChild(el);
+    soldier.element = el;
+  }
+
+  function removeSoldierElement(soldier) {
+    // Optionally do a fade-out
+    soldier.element.classList.add("dying");
+    setTimeout(() => {
+      if (soldier.element && soldier.element.parentNode) {
+        soldier.element.parentNode.removeChild(soldier.element);
+      }
+      soldier.element = null;
+    }, 400);
+  }
+
+  function positionSoldierElement(soldier) {
+    // Animate by updating .style.left/top
+    if (soldier.element) {
+      soldier.element.style.left = soldier.col * CELL_WIDTH + "px";
+      soldier.element.style.top = soldier.row * CELL_HEIGHT + "px";
+      soldier.element.classList.remove(`owner0`, `owner1`);
+      soldier.element.classList.add(`owner${soldier.owner}`);
     }
   }
 
+  function updateSoldierContent(soldier) {
+    if (!soldier.element) return;
+    soldier.element.textContent = "?";
+    if (soldier.owner === myPlayerIndex || soldier.revealed || soldier.item === "tie") {
+      if (soldier.item === "tie") {
+        soldier.element.textContent = "TIE";
+      } else {
+        soldier.element.textContent = soldier.item[0].toUpperCase(); // "R"/"P"/"S"
+      }
+    }
+  }
+
+  // Clicking a soldier to move
+  function onSoldierClick(soldierId) {
+    // If it's not my turn or game not playing, do nothing
+    if (!currentGame || currentGame.state !== "playing") return;
+    if (currentGame.currentPlayerIndex !== myPlayerIndex) return;
+    if (currentGame.waitingForTieBreak) return;
+
+    const soldier = soldiers.find(s => s.id === soldierId);
+    if (!soldier) return;
+    if (soldier.owner !== myPlayerIndex) return;
+
+    // If we haven't selected anything yet
+    if (!selectedSoldierId) {
+      selectedSoldierId = soldierId;
+      soldier.element.style.outline = "2px solid red";
+    } else if (selectedSoldierId === soldierId) {
+      // clicked same soldier => deselect
+      selectedSoldierId = null;
+      soldier.element.style.outline = "none";
+    } else {
+      // we had a soldier selected, now we clicked a different soldier
+      // maybe we ignore or just reselect
+      // for simplicity, let's just reselect
+      const oldSoldier = soldiers.find(s => s.id === selectedSoldierId);
+      if (oldSoldier && oldSoldier.element) {
+        oldSoldier.element.style.outline = "none";
+      }
+      selectedSoldierId = soldierId;
+      soldier.element.style.outline = "2px solid red";
+    }
+  }
+
+  // Also handle click on empty board space to move soldier
+  boardContainer.addEventListener("click", (e) => {
+    // get the offset
+    if (!selectedSoldierId) return;
+    // If they clicked on the soldier itself, it triggers soldier click above
+    // We only proceed if they clicked on "empty" space within boardContainer
+    const rect = boardContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const col = Math.floor(x / CELL_WIDTH);
+    const row = Math.floor(y / CELL_HEIGHT);
+
+    // If they didn't click exactly on the soldier, we consider it "destination"
+    // We'll attempt the move
+    attemptMove(selectedSoldierId, row, col);
+  });
+
+  function attemptMove(soldierId, toRow, toCol) {
+    const soldier = soldiers.find(s => s.id === soldierId);
+    if (!soldier) return;
+
+    // We'll emit "playerMove" with fromRow/fromCol => soldier's position
+    socket.emit("playerMove", {
+      gameId: currentGame.gameId,
+      fromRow: soldier.row,
+      fromCol: soldier.col,
+      toRow,
+      toCol
+    });
+
+    // unselect soldier
+    soldier.element.style.outline = "none";
+    selectedSoldierId = null;
+  }
+
   // ---------------------------
-  // 7) Tie break
+  // 8) Tie break
   // ---------------------------
   tieBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -262,16 +367,13 @@
   });
 
   // ---------------------------
-  // 8) Replay
+  // 9) Replay & Exit
   // ---------------------------
   replayBtn.addEventListener("click", () => {
     if (!currentGame) return;
     socket.emit("requestReplay", { gameId: currentGame.gameId });
   });
 
-  // ---------------------------
-  // 9) Exit to Lobby
-  // ---------------------------
   exitLobbyBtn.addEventListener("click", () => {
     if (!currentGame) return;
     socket.emit("exitToLobby", { gameId: currentGame.gameId });
@@ -282,11 +384,13 @@
     lobbyContainer.classList.remove("hidden");
     currentGame = null;
     myPlayerIndex = null;
-    selectedCell = null;
+    selectedSoldierId = null;
+    soldiers = [];
+    boardContainer.innerHTML = "";
   });
 
   // ---------------------------
-  // Global errors
+  // 10) Error handling
   // ---------------------------
   socket.on("errorOccurred", (msg) => {
     alert(msg);
